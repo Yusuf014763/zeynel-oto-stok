@@ -8,7 +8,7 @@ from datetime import datetime, date
 import io
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Zeynel Oto - Profesyonel Stok & Geçmiş Paneli", page_icon="🔧", layout="wide")
+st.set_page_config(page_title="Zeynel Oto - Stok & Geçmiş Paneli", page_icon="🔧", layout="wide")
 
 DB_FILE = "stok_verileri.json"
 HISTORY_FILE = "islem_gecmisi.json"
@@ -35,8 +35,6 @@ def load_history():
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             df_h = pd.DataFrame(json.load(f))
-            if not df_h.empty and "Tarih_DT" not in df_h.columns:
-                df_h["Tarih_DT"] = pd.to_datetime(df_h["Tarih"])
             return df_h
     else:
         return pd.DataFrame(columns=["Tarih", "İşlem", "Parça Adı", "Miktar", "Plaka", "Kalan Stok"])
@@ -53,10 +51,6 @@ def add_history(islem_tipi, parca_adi, miktar, plaka, kalan_stok):
         "Kalan Stok": kalan_stok
     }
     
-    # JSON için basitleştirilmiş kaydetme
-    if "Tarih_DT" in df_h.columns:
-        df_h = df_h.drop(columns=["Tarih_DT"])
-        
     df_h = pd.concat([pd.DataFrame([yeni_kayit]), df_h], ignore_index=True)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(df_h.to_dict(orient="records"), f, ensure_ascii=False, indent=4)
@@ -84,11 +78,11 @@ def check_password():
     return True
 
 if check_password():
-    st.title("🔧 Zeynel Oto Ford Özel Servis - Stok & Haraket Takibi")
+    st.title("🔧 Zeynel Oto Ford Özel Servis")
     
     tab1, tab2, tab3, tab4 = st.tabs([
         "📉 Alim Usta (Hızlı Düş / Ekle)", 
-        "📅 Tarih & Parça Detay Sorgu (Zeynel Usta Modu)", 
+        "📅 Tarih & Detay Sorgu", 
         "📦 Tüm Stok & Excel İndir",
         "📄 Fatura Okut (AI)"
     ])
@@ -110,11 +104,8 @@ if check_password():
 
         secilen_parca = st.selectbox("📌 Listeden Parçayı Seçin:", ["Seçiniz..."] + parca_listesi)
         
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            islem_adedi = st.number_input("🔢 İşlem Adedi (Kaç Tane?):", min_value=1, value=1, step=1)
-        with col_p2:
-            plaka_input = st.text_input("🚘 Araç Plakası (Zorunlu Değil):", placeholder="Örn: 01 ABC 123").upper()
+        islem_adedi = st.number_input("🔢 İşlem Adedi (Kaç Tane?):", min_value=1, value=1, step=1)
+        plaka_input = st.text_input("🚘 Araç Plakası (Zorunlu Değil):", placeholder="Örn: 01 ABC 123").upper()
 
         if secilen_parca != "Seçiniz...":
             match = df[df["Parça Adı"] == secilen_parca]
@@ -124,53 +115,46 @@ if check_password():
                 item_name = df.loc[idx, "Parça Adı"]
                 current_stock = int(df.loc[idx, "Stok"])
 
-                st.info(f"📌 **Seçilen Ürün:** {item_name} | **Mevcut Depo Stok:** {current_stock} Adet")
+                st.info(f"📌 **Seçilen Ürün:** {item_name}\n\n📦 **Mevcut Stok:** {current_stock} Adet")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(f"🔴 {islem_adedi} Adet Düş (Araca Takıldı)", use_container_width=True):
-                        if current_stock >= islem_adedi:
-                            st.session_state.inventory.loc[idx, "Stok"] -= islem_adedi
-                            yeni_stok = int(st.session_state.inventory.loc[idx, "Stok"])
-                            save_data(st.session_state.inventory)
-                            add_history("Stok Düşüldü", item_name, -islem_adedi, plaka_input, yeni_stok)
-                            st.success(f"{islem_adedi} Adet {item_name} düşüldü! Kalan Stok: {yeni_stok}")
-                            st.rerun()
-                        else:
-                            st.error(f"Depoda yeterli stok yok! Mevcut Stok: {current_stock}")
-                with col2:
-                    if st.button(f"🟢 {islem_adedi} Adet Ekle (Rafa Koyuldu)", use_container_width=True):
-                        st.session_state.inventory.loc[idx, "Stok"] += islem_adedi
+                if st.button(f"🔴 {islem_adedi} Adet Düş (Araca Takıldı)", use_container_width=True):
+                    if current_stock >= islem_adedi:
+                        st.session_state.inventory.loc[idx, "Stok"] -= islem_adedi
                         yeni_stok = int(st.session_state.inventory.loc[idx, "Stok"])
                         save_data(st.session_state.inventory)
-                        add_history("Stok Eklendi", item_name, +islem_adedi, plaka_input, yeni_stok)
-                        st.success(f"{islem_adedi} Adet {item_name} eklendi! Yeni Stok: {yeni_stok}")
+                        add_history("Stok Düşüldü", item_name, -islem_adedi, plaka_input, yeni_stok)
+                        st.success(f"{islem_adedi} Adet {item_name} düşüldü! Kalan Stok: {yeni_stok}")
                         st.rerun()
+                    else:
+                        st.error(f"Depoda yeterli stok yok! Mevcut Stok: {current_stock}")
+                
+                if st.button(f"🟢 {islem_adedi} Adet Ekle (Rafa Koyuldu)", use_container_width=True):
+                    st.session_state.inventory.loc[idx, "Stok"] += islem_adedi
+                    yeni_stok = int(st.session_state.inventory.loc[idx, "Stok"])
+                    save_data(st.session_state.inventory)
+                    add_history("Stok Eklendi", item_name, +islem_adedi, plaka_input, yeni_stok)
+                    st.success(f"{islem_adedi} Adet {item_name} eklendi! Yeni Stok: {yeni_stok}")
+                    st.rerun()
 
     # ==========================================
-    # SEKME 2: TARİH & PARÇA DETAY SORGU
+    # SEKME 2: TARİH & PARÇA DETAY SORGU (MOBİL UYUMLU)
     # ==========================================
     with tab2:
-        st.header("📅 Tarih Aralığı ve Parça Bazlı Stok İnceleme")
+        st.header("📅 Tarih Aralığı Sorgulama")
         
         df_history = load_history()
         
         if not df_history.empty:
             df_history["Tarih_DT"] = pd.to_datetime(df_history["Tarih"])
             
-            # Filtre Paneli
-            col_f1, col_f2, col_f3 = st.columns([2, 2, 3])
+            # Mobil Düzgün Görünüm İçin Alt Alta Kutu Yapısı
+            st.subheader("1️⃣ Tarih Aralığı Seçin")
+            bas_tarih = st.date_input("Başlangıç Tarihi:", value=date.today().replace(day=1))
+            bit_tarih = st.date_input("Bitiş Tarihi:", value=date.today())
             
-            with col_f1:
-                bas_tarih = st.date_input("📅 Başlangıç Tarihi:", value=date.today().replace(day=1))
-            with col_f2:
-                bit_tarih = st.date_input("📅 Bitiş Tarihi:", value=date.today())
-            with col_f3:
-                filtre_parca = st.text_input("🔍 Parça Adı Filtresi (İsteğe Bağlı):", placeholder="Örn: Z Rot, Balata, Transit...")
-
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                filtre_plaka = st.text_input("🚘 Plaka Sorgu (İsteğe Bağlı):", placeholder="Örn: 01 ABC 123").upper()
+            st.subheader("2️⃣ İsteğe Bağlı Filtreler")
+            filtre_parca = st.text_input("🔍 Parça Adı Filtresi:", placeholder="Örn: Z Rot, Balata, Transit...")
+            filtre_plaka = st.text_input("🚘 Plaka Sorgu:", placeholder="Örn: 01 ABC 123").upper()
 
             # Tarih Süzme
             mask = (df_history["Tarih_DT"].dt.date >= bas_tarih) & (df_history["Tarih_DT"].dt.date <= bit_tarih)
@@ -192,10 +176,9 @@ if check_password():
                 cikan = abs(süzülmüs_df[süzülmüs_df["Miktar"] < 0]["Miktar"].sum())
                 net = giren - cikan
 
-                m1, m2, m3 = st.columns(3)
-                m1.metric("🟢 Toplam Giren (Stok)", f"+{giren} Adet")
-                m2.metric("🔴 Toplam Çıkan (Araca Takılan)", f"-{cikan} Adet")
-                m3.metric("📊 Net Değişim", f"{net} Adet")
+                st.metric("🟢 Toplam Giren (Stok)", f"+{giren} Adet")
+                st.metric("🔴 Toplam Çıkan (Araca Takılan)", f"-{cikan} Adet")
+                st.metric("📊 Net Değişim", f"{net} Adet")
 
                 st.subheader("📋 Detaylı Hareket Tablosu")
                 gosterilecek_df = süzülmüs_df[["Tarih", "İşlem", "Parça Adı", "Miktar", "Plaka", "Kalan Stok"]]
@@ -215,7 +198,7 @@ if check_password():
         kritikler = df[df["Stok"] <= df["Kritik Limit"]]
         
         if not kritikler.empty:
-            st.error("⚠️ **KRİTİK SEVİYEDEKİ PARÇALAR (EKSİKLER / SİPARİŞ EDİLECEKLER):**")
+            st.error("⚠️ **KRİTİK SEVİYEDEKİ PARÇALAR (EKSİKLER):**")
             st.dataframe(kritikler[["Barkod", "Parça Adı", "Stok", "Kritik Limit"]], use_container_width=True)
             st.divider()
 
