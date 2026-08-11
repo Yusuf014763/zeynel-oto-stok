@@ -155,33 +155,37 @@ if check_password():
             st.divider()
 
         with st.expander("➕ Sıfırdan Yeni Parça Ekle (Elle)"):
-            y_barkod = st.text_input("Barkod (İsteğe Bağlı):", placeholder="869...")
-            y_adi = st.text_input("Parça Adı:", placeholder="Örn: Ford Focus Ön Fren Balatası")
-            y_stok = st.number_input("Başlangıç Stoğu:", min_value=1, value=5)
-            y_kritik = st.number_input("Kritik Stok Limiti:", min_value=1, value=2)
-            
-            if st.button("Kaydet ve Stoğa Ekle"):
-                if y_adi:
-                    yeni_satir = {
-                        "Barkod": y_barkod if y_barkod else f"MAN_{len(st.session_state.inventory)+1}",
-                        "Parça Adı": y_adi,
-                        "Stok": int(y_stok),
-                        "Kritik Limit": int(y_kritik)
-                    }
-                    st.session_state.inventory = pd.concat([st.session_state.inventory, pd.DataFrame([yeni_satir])], ignore_index=True)
-                    save_data(st.session_state.inventory)
-                    st.success(f"{y_adi} başarıyla eklendi!")
-                    st.rerun()
-                else:
-                    st.error("Lütfen parça adını girin!")
+            with st.form("yeni_parca_formu", clear_on_submit=True):
+                y_barkod = st.text_input("Barkod (İsteğe Bağlı):", placeholder="869...")
+                y_adi = st.text_input("Parça Adı:", placeholder="Örn: Ford Focus Ön Fren Balatası")
+                y_stok = st.number_input("Başlangıç Stoğu:", min_value=1, value=5)
+                y_kritik = st.number_input("Kritik Stok Limiti:", min_value=1, value=2)
+                
+                submitted = st.form_submit_button("Kaydet ve Stoğa Ekle", use_container_width=True)
+                if submitted:
+                    if y_adi:
+                        yeni_satir = {
+                            "Barkod": y_barkod if y_barkod else f"MAN_{len(st.session_state.inventory)+1}",
+                            "Parça Adı": y_adi,
+                            "Stok": int(y_stok),
+                            "Kritik Limit": int(y_kritik)
+                        }
+                        st.session_state.inventory = pd.concat([st.session_state.inventory, pd.DataFrame([yeni_satir])], ignore_index=True)
+                        save_data(st.session_state.inventory)
+                        st.success(f"'{y_adi}' başarıyla stoğa eklendi!")
+                        st.rerun()
+                    else:
+                        st.error("Lütfen parça adını girin!")
 
         st.subheader("Mevcut Stok Listesi")
-        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+        st.caption("💡 Fazla veya hatalı eklenen satırları seçip Klavyeden 'Delete' tuşuna basarak silebilirsiniz.")
         
-        if st.button("💾 Değişiklikleri Kaydet", use_container_width=True):
+        edited_df = st.data_editor(st.session_state.inventory, num_rows="dynamic", use_container_width=True, key="editor")
+        
+        if st.button("💾 Değişiklikleri / Silinenleri Kaydet", use_container_width=True):
             st.session_state.inventory = edited_df
             save_data(edited_df)
-            st.success("Stok tablosu kaydedildi!")
+            st.success("Stok tablosu güncellendi ve kaydedildi!")
             st.rerun()
             
         st.divider()
