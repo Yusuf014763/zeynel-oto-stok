@@ -137,7 +137,7 @@ def check_password():
 
     password = st.text_input("Giriş Şifresi:", type="password")
     if st.button("Giriş Yap", use_container_width=True):
-      if password == "1234":
+      if password == "12345":
         st.session_state["authenticated"] = True
         st.rerun()
       else:
