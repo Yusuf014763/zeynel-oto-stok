@@ -4,7 +4,7 @@ import google.generativeai as genai
 from PIL import Image
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 import io
 
 # --- SAYFA AYARLARI ---
@@ -34,20 +34,29 @@ def save_data(df):
 def load_history():
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return pd.DataFrame(json.load(f))
+            df_h = pd.DataFrame(json.load(f))
+            if not df_h.empty and "Tarih_DT" not in df_h.columns:
+                df_h["Tarih_DT"] = pd.to_datetime(df_h["Tarih"])
+            return df_h
     else:
         return pd.DataFrame(columns=["Tarih", "İşlem", "Parça Adı", "Miktar", "Plaka", "Kalan Stok"])
 
 def add_history(islem_tipi, parca_adi, miktar, plaka, kalan_stok):
     df_h = load_history()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     yeni_kayit = {
-        "Tarih": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Tarih": now_str,
         "İşlem": islem_tipi,
         "Parça Adı": parca_adi,
         "Miktar": miktar,
         "Plaka": plaka.strip().upper() if plaka else "BİLİNMİYOR",
         "Kalan Stok": kalan_stok
     }
+    
+    # JSON için basitleştirilmiş kaydetme
+    if "Tarih_DT" in df_h.columns:
+        df_h = df_h.drop(columns=["Tarih_DT"])
+        
     df_h = pd.concat([pd.DataFrame([yeni_kayit]), df_h], ignore_index=True)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(df_h.to_dict(orient="records"), f, ensure_ascii=False, indent=4)
@@ -75,12 +84,12 @@ def check_password():
     return True
 
 if check_password():
-    st.title("🔧 Zeynel Oto Ford Özel Servis - Stok & Geçmiş Takibi")
+    st.title("🔧 Zeynel Oto Ford Özel Servis - Stok & Haraket Takibi")
     
     tab1, tab2, tab3, tab4 = st.tabs([
         "📉 Alim Usta (Hızlı Düş / Ekle)", 
-        "🚘 Araç Geçmişi & İşlem Logları", 
-        "📦 Tüm Stok & Manuel Düzenle",
+        "📅 Tarih & Parça Detay Sorgu (Zeynel Usta Modu)", 
+        "📦 Tüm Stok & Excel İndir",
         "📄 Fatura Okut (AI)"
     ])
 
@@ -90,7 +99,6 @@ if check_password():
     with tab1:
         st.header("⚡ Hızlı Stok Hareketleri")
         
-        # Parça Arama Kutusu
         arama_metni = st.text_input("🔍 Parça Ara (İsim veya Barkod Yazın):", placeholder="Örn: Z Rot, Balata, Filtre...")
         
         df = st.session_state.inventory
@@ -140,29 +148,62 @@ if check_password():
                         st.rerun()
 
     # ==========================================
-    # SEKME 2: ARAÇ GEÇMİŞİ VE İŞLEM LOGLARI
+    # SEKME 2: TARİH & PARÇA DETAY SORGU
     # ==========================================
     with tab2:
-        st.header("🚘 Araç Plakası & Stok İşlem Geçmişi")
+        st.header("📅 Tarih Aralığı ve Parça Bazlı Stok İnceleme")
         
         df_history = load_history()
         
-        arama_plaka = st.text_input("🔍 Araç Plakası İle Sorgula (Müşteri Geçmişi):", placeholder="Örn: 01 ABC 123").strip().upper()
-        
-        if arama_plaka:
-            filtrelenmis = df_history[df_history["Plaka"].str.contains(arama_plaka, na=False)]
-            st.subheader(f"🚘 Plaka Geçmişi: {arama_plaka}")
-            if not filtrelenmis.empty:
-                st.dataframe(filtrelenmis, use_container_width=True)
-            else:
-                st.warning("Bu plakaya ait işlem kaydı bulunamadı.")
+        if not df_history.empty:
+            df_history["Tarih_DT"] = pd.to_datetime(df_history["Tarih"])
+            
+            # Filtre Paneli
+            col_f1, col_f2, col_f3 = st.columns([2, 2, 3])
+            
+            with col_f1:
+                bas_tarih = st.date_input("📅 Başlangıç Tarihi:", value=date.today().replace(day=1))
+            with col_f2:
+                bit_tarih = st.date_input("📅 Bitiş Tarihi:", value=date.today())
+            with col_f3:
+                filtre_parca = st.text_input("🔍 Parça Adı Filtresi (İsteğe Bağlı):", placeholder="Örn: Z Rot, Balata, Transit...")
+
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                filtre_plaka = st.text_input("🚘 Plaka Sorgu (İsteğe Bağlı):", placeholder="Örn: 01 ABC 123").upper()
+
+            # Tarih Süzme
+            mask = (df_history["Tarih_DT"].dt.date >= bas_tarih) & (df_history["Tarih_DT"].dt.date <= bit_tarih)
+            süzülmüs_df = df_history[mask].copy()
+
+            # Parça İsmi Süzme
+            if filtre_parca:
+                süzülmüs_df = süzülmüs_df[süzülmüs_df["Parça Adı"].str.contains(filtre_parca, case=False, na=False)]
+
+            # Plaka Süzme
+            if filtre_plaka:
+                süzülmüs_df = süzülmüs_df[süzülmüs_df["Plaka"].str.contains(filtre_plaka, case=False, na=False)]
+
             st.divider()
 
-        st.subheader("📋 Son Yapılan Tüm Stok Hareketleri")
-        if not df_history.empty:
-            st.dataframe(df_history, use_container_width=True)
+            # Özet Kartları
+            if not süzülmüs_df.empty:
+                giren = süzülmüs_df[süzülmüs_df["Miktar"] > 0]["Miktar"].sum()
+                cikan = abs(süzülmüs_df[süzülmüs_df["Miktar"] < 0]["Miktar"].sum())
+                net = giren - cikan
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("🟢 Toplam Giren (Stok)", f"+{giren} Adet")
+                m2.metric("🔴 Toplam Çıkan (Araca Takılan)", f"-{cikan} Adet")
+                m3.metric("📊 Net Değişim", f"{net} Adet")
+
+                st.subheader("📋 Detaylı Hareket Tablosu")
+                gosterilecek_df = süzülmüs_df[["Tarih", "İşlem", "Parça Adı", "Miktar", "Plaka", "Kalan Stok"]]
+                st.dataframe(gosterilecek_df, use_container_width=True)
+            else:
+                st.warning("Seçilen tarih aralığında ve kriterlerde bir hareket bulunamadı.")
         else:
-            st.info("Henüz kaydedilmiş bir stok hareketi yok.")
+            st.info("Henüz sistemde kaydedilmiş bir hareket yok.")
 
     # ==========================================
     # SEKME 3: TÜM STOK & EXCEL İNDİRME
